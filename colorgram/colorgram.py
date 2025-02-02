@@ -7,6 +7,11 @@ import array
 from collections import namedtuple
 from PIL import Image
 
+import argparse
+import sys
+import json
+import csv
+
 import sys
 if sys.version_info[0] <= 2:
     range = xrange
@@ -159,6 +164,103 @@ def hsl(r, g, b):
         h //= 6
     
     return h, s, l
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Extract prominent colors from an image.'
+    )
+    parser.add_argument(
+        'image', 
+        help='Path to the input image file'
+    )
+    parser.add_argument(
+        '-n', '--number', 
+        type=int, 
+        default=6,
+        help='Number of colors to extract (default: 6)'
+    )
+    parser.add_argument(
+        '--format', 
+        choices=['text', 'json', 'csv'], 
+        default='text',
+        help='Output format (default: text)'
+    )
+    parser.add_argument(
+        '-o', '--output', 
+        help='Output file (default: stdout)'
+    )
+
+    args = parser.parse_args()
+
+    # Open image and extract colors
+    try:
+        img = Image.open(args.image)
+        colors = extract(img, args.number)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # Generate output
+    output_file = open(args.output, 'w') if args.output else sys.stdout
+    try:
+        if args.format == 'text':
+            generate_text_output(colors, output_file)
+        elif args.format == 'json':
+            generate_json_output(colors, output_file)
+        elif args.format == 'csv':
+            generate_csv_output(colors, output_file)
+    finally:
+        if args.output:
+            output_file.close()
+
+def generate_text_output(colors, file):
+    for i, color in enumerate(colors, 1):
+        hex_code = "#{:02X}{:02X}{:02X}".format(
+            color.rgb.r, color.rgb.g, color.rgb.b
+        )
+        proportion = color.proportion * 100
+        print(
+            f"{i}. {hex_code} (RGB: {color.rgb.r}, {color.rgb.g}, {color.rgb.b})"
+            f" - {proportion:.2f}%", 
+            file=file
+        )
+
+def generate_json_output(colors, file):
+    json_data = []
+    for color in colors:
+        json_data.append({
+            "rgb": dict(color.rgb._asdict()),
+            "hsl": dict(color.hsl._asdict()),
+            "proportion": color.proportion,
+            "hex": "#{:02X}{:02X}{:02X}".format(
+                color.rgb.r, color.rgb.g, color.rgb.b
+            )
+        })
+    json.dump(json_data, file, indent=2)
+
+def generate_csv_output(colors, file):
+    writer = csv.writer(file)
+    writer.writerow([
+        'hex', 'r', 'g', 'b', 
+        'h', 's', 'l', 
+        'proportion'
+    ])
+    for color in colors:
+        writer.writerow([
+            "#{:02X}{:02X}{:02X}".format(
+                color.rgb.r, color.rgb.g, color.rgb.b
+            ),
+            color.rgb.r,
+            color.rgb.g,
+            color.rgb.b,
+            color.hsl.h,
+            color.hsl.s,
+            color.hsl.l,
+            f"{color.proportion:.4f}"
+        ])
+
+if __name__ == '__main__':
+    main()
 
 # Useful snippet for testing values:
 # print "Pixel #{}".format(str(y * width + x))
